@@ -19,48 +19,71 @@ namespace Updater
     /// </summary>
     public partial class MainWindow : Window
     {
-        public static Queue<string> FilesList { get; set; }
+        //public static Queue<string> FilesList { get; set; }
+
         public MainWindow()
         {
-            FilesList = new Queue<string>();
+            //FilesList = new Queue<string>();
 
             InitializeComponent();
         }
         private void Window_Loaded(object sender, RoutedEventArgs e)
         {
-            ReadArgs();
-            //Update UI
-            pbEst.Maximum = FilesList.Count;
-            pbEst.Value = 0;
-            //Get Data From Database
-            GetUpdateData();
+            if (!ReadArgs())
+                System.Diagnostics.Process.GetCurrentProcess().Kill();
+            
         }
-        private void ReadArgs()
+        private bool ReadArgs()
         {
+            // Args:
+            // 1- Temp String
+            // 2- Opcode (int)
+            // 3- Connection String (string)
+            // 4- Files Split With | (string)
             try
             {
                 if (Environment.GetCommandLineArgs().Length <= 1)
                 {
                     MessageBox.Show("No Data Found ...", "Shutdown", MessageBoxButton.OK, MessageBoxImage.Error);
-                    App.Current.Dispatcher.InvokeShutdown();
+                    System.Diagnostics.Process.GetCurrentProcess().Kill();
                 }
+                //string arg = FXFW.EncDec.Decrypt(Environment.GetCommandLineArgs()[1], Core.DecryptPassword);
+                
                 string arg = Environment.GetCommandLineArgs()[1];
 
-                string[] Data = FXFW.EncDec.Decrypt(arg, "FalseX").Split(Convert.ToChar("|"));
-                Properties.Settings.Default["DatabaseConnectionString"] = Data[0];
-                string ApplicationDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
-                for (int i = 1; i < Data.Length; i++)
-                    FilesList.Enqueue(String.Format(@"{0}\{1}", ApplicationDir, Data[i]));   
+                int Opcode = Convert.ToInt32(arg.Split(Core.SplitChar)[0]);// Extract Opcode
+                
+                string command = arg.Substring(2, arg.Length - 2);
+                
+                switch (Opcode)
+                {
+                    case (int)Core.UpdaterArgsEnum.Download:// 2
+                        Queue<string> FilesList = (Queue<string>)Core.ReadDownloadArgs(command);
+                        pbEst.Maximum = FilesList.Count; pbEst.Value = 0;//Update UI
+                        GetDownloadData(FilesList);
+                        break;
+                    case (int)Core.UpdaterArgsEnum.Upload:// 1
+                        Queue<KeyValuePair<string, int>> UploadData = Core.ReadUploadArgs(command);
+                        pbEst.Maximum = UploadData.Count; pbEst.Value = 0;//Update UI
+                        SetUploadData(UploadData);
+                        break;
+                    default:
+                        System.Diagnostics.Process.GetCurrentProcess().Kill();
+                        break;
+                }
+                return true;
             }
             catch (Exception ex)
             {
                 MessageBox.Show(ex.Message, "error", MessageBoxButton.OK, MessageBoxImage.Information);
                 App.Current.Dispatcher.InvokeShutdown();
             }
-            
+            return false;
         }
-        private void GetUpdateData()
+        private void GetDownloadData(Queue<string> Data)
         {
+            Queue<string> FilesList = Data;
+
             if (FilesList.Count == 0)// All Files Downloaded, Application Will Shutdown
             {
                 MessageBox.Show("All Files Downloaded ... Application Will Shutdown", "Operation Ended", MessageBoxButton.OK, MessageBoxImage.Information);
@@ -82,10 +105,36 @@ namespace Updater
                 fs.Close();
 
                 Dispatcher.Invoke(new Action(() => { pbEst.Value = Convert.ToInt32(pbEst.Value) + 1; }));
-                GetUpdateData();
+                GetDownloadData(FilesList);// pool Next File
                 
             });
         }
+        private void SetUploadData(Queue<KeyValuePair<string, int>> Data)
+        {
+            if (Data.Count == 0)// All Files Uploaded, Application Will Shutdown
+            {
+                MessageBox.Show("All Files Uploaded ... Application Will Shutdown", "Operation Ended", MessageBoxButton.OK, MessageBoxImage.Information);
+                App.Current.Dispatcher.InvokeShutdown();
+                return;
+            }
+            System.Threading.ThreadPool.QueueUserWorkItem((o) =>
+            {
+                KeyValuePair<string, int> value = Data.Dequeue();
+                Dispatcher.Invoke(new Action(() => { lblFileName.Content = System.IO.Path.GetFileName(value.Key); }));
+
+                if (Core.SetFileData(System.IO.Path.GetFileName(value.Key), value.Value, System.IO.File.ReadAllBytes(value.Key)))
+                {
+                    Dispatcher.Invoke(new Action(() => { pbEst.Value = Convert.ToInt32(pbEst.Value) + 1; }));
+                    SetUploadData(Data);// pool Next File
+                }
+                else
+                {
+                    MessageBox.Show(String.Format("{0}{1}Failed to save file to Database", value.Key, Environment.NewLine), "Error", MessageBoxButton.OK, MessageBoxImage.Error);
+                    System.Diagnostics.Process.GetCurrentProcess().Kill();
+                }
+            });
+        }
+
         private void Test()
         {
             string ApplicationDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);

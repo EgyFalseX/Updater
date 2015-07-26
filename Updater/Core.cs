@@ -9,6 +9,9 @@ namespace Updater
 {
     public static class Core
     {
+
+        public static Char SplitChar = Convert.ToChar("|");
+        public static string DecryptPassword = "FalseX";
         public static void SetAllCommandTimeouts(object adapter, int timeout)
         {
             var commands = adapter.GetType().InvokeMember("CommandCollection", System.Reflection.BindingFlags.GetProperty | System.Reflection.BindingFlags.Instance | System.Reflection.BindingFlags.NonPublic,
@@ -51,7 +54,8 @@ namespace Updater
             string FileName = System.IO.Path.GetFileName(FilePath);
             SqlConnection con = new SqlConnection(Properties.Settings.Default.DatabaseConnectionString);
             string commandString = String.Format("SELECT FileData FROM dbo.AppDependenceFile WHERE FileName = '{0}'", FileName);
-            SqlCommand cmd = new SqlCommand(commandString, con);
+            SqlCommand cmd = new SqlCommand(commandString, con) { CommandTimeout = 0 };
+            cmd.CommandTimeout = 0;
             try
             {
                 con.Open();
@@ -67,10 +71,67 @@ namespace Updater
 
             return output;
         }
+        public static bool SetFileData(string FileName, int FileVersion, byte[] FileData)
+        {
+            bool output = false;
+
+            //string FileName = System.IO.Path.GetFileName(FilePath);
+            SqlConnection con = new SqlConnection(Properties.Settings.Default.DatabaseConnectionString);
+            SqlCommand cmd = new SqlCommand(@"IF EXISTS(SELECT * FROM dbo.AppDependenceFile WHERE [FileName] = @FileName)
+            UPDATE dbo.AppDependenceFile SET FileVersion = @FileVersion, FileData = @FileData WHERE [FileName] = @FileName
+            ELSE
+            INSERT INTO dbo.AppDependenceFile ([FileName], FileVersion, FileData) VALUES(@FileName, @FileVersion, @FileData)", con) { CommandTimeout = 0 };
+            SqlParameter paramFileName = new SqlParameter("@FileName", SqlDbType.NVarChar);
+            SqlParameter paramFileVersion = new SqlParameter("@FileVersion", SqlDbType.Int);
+            SqlParameter paramFileData = new SqlParameter("@FileData", SqlDbType.Image);
+            cmd.Parameters.AddRange(new SqlParameter[] { paramFileName, paramFileVersion, paramFileData });
+            try
+            {
+                paramFileName.Value = FileName;
+                paramFileVersion.Value = FileVersion;
+                paramFileData.Value = FileData;
+                con.Open();
+                cmd.ExecuteNonQuery();
+                output = true;
+            }
+            catch (SqlException ex)
+            {
+                throw ex;
+            }
+            con.Close();
+
+            return output;
+        }
+
         public enum UpdaterArgsEnum
         {
             Upload = 1,
             Download = 2
         }
+        public static Queue<string> ReadDownloadArgs(string arg)
+        {
+            Queue<string> output = new Queue<string>();
+            string[] Data = arg.Split(SplitChar);
+            Properties.Settings.Default["DatabaseConnectionString"] = Data[0];
+            string ApplicationDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+
+            for (int i = 1; i < Data.Length; i++)
+                output.Enqueue(String.Format(@"{0}\{1}", ApplicationDir, Data[i]));
+
+            return output;
+        }
+        public static Queue<KeyValuePair<string, int>> ReadUploadArgs(string arg)
+        {
+            Queue<KeyValuePair<string, int>> output = new Queue<KeyValuePair<string, int>>();
+            string[] Data = arg.Split(SplitChar);
+            Properties.Settings.Default["DatabaseConnectionString"] = Data[0];
+            string ApplicationDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
+
+            for (int i = 1; i < Data.Length; i = i + 2)
+                output.Enqueue(new KeyValuePair<string, int>(String.Format(@"{0}\{1}", ApplicationDir, Data[i]), Convert.ToInt32(Data[i + 1])));
+            return output;
+
+        }
+
     }
 }
