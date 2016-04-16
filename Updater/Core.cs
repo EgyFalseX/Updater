@@ -71,7 +71,7 @@ namespace Updater
 
             return output;
         }
-        public static bool SetFileData(string FileName, int FileVersion, byte[] FileData)
+        public static bool SetFileData(string FileName, Int64 FileVersion, byte[] FileData)
         {
             bool output = false;
 
@@ -82,7 +82,7 @@ namespace Updater
             ELSE
             INSERT INTO dbo.AppDependenceFile ([FileName], FileVersion, FileData) VALUES(@FileName, @FileVersion, @FileData)", con) { CommandTimeout = 0 };
             SqlParameter paramFileName = new SqlParameter("@FileName", SqlDbType.NVarChar);
-            SqlParameter paramFileVersion = new SqlParameter("@FileVersion", SqlDbType.Int);
+            SqlParameter paramFileVersion = new SqlParameter("@FileVersion", SqlDbType.BigInt);
             SqlParameter paramFileData = new SqlParameter("@FileData", SqlDbType.Image);
             cmd.Parameters.AddRange(new SqlParameter[] { paramFileName, paramFileVersion, paramFileData });
             try
@@ -120,15 +120,15 @@ namespace Updater
 
             return output;
         }
-        public static Queue<KeyValuePair<string, int>> ReadUploadArgs(string arg)
+        public static Queue<KeyValuePair<string, Int64>> ReadUploadArgs(string arg)
         {
-            Queue<KeyValuePair<string, int>> output = new Queue<KeyValuePair<string, int>>();
+            Queue<KeyValuePair<string, Int64>> output = new Queue<KeyValuePair<string, Int64>>();
             string[] Data = arg.Split(SplitChar);
             Properties.Settings.Default["DatabaseConnectionString"] = Data[0];
             string ApplicationDir = System.IO.Path.GetDirectoryName(System.Reflection.Assembly.GetExecutingAssembly().Location);
 
             for (int i = 1; i < Data.Length; i = i + 2)
-                output.Enqueue(new KeyValuePair<string, int>(String.Format(@"{0}\{1}", ApplicationDir, Data[i]), Convert.ToInt32(Data[i + 1])));
+                output.Enqueue(new KeyValuePair<string, Int64>(String.Format(@"{0}\{1}", ApplicationDir, Data[i]), Convert.ToInt64(Data[i + 1])));
             return output;
 
         }

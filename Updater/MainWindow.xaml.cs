@@ -63,7 +63,7 @@ namespace Updater
                         GetDownloadData(FilesList);
                         break;
                     case (int)Core.UpdaterArgsEnum.Upload:// 1
-                        Queue<KeyValuePair<string, int>> UploadData = Core.ReadUploadArgs(command);
+                        Queue<KeyValuePair<string, Int64>> UploadData = Core.ReadUploadArgs(command);
                         pbEst.Maximum = UploadData.Count; pbEst.Value = 0;//Update UI
                         SetUploadData(UploadData);
                         break;
@@ -109,7 +109,7 @@ namespace Updater
                 
             });
         }
-        private void SetUploadData(Queue<KeyValuePair<string, int>> Data)
+        private void SetUploadData(Queue<KeyValuePair<string, Int64>> Data)
         {
             if (Data.Count == 0)// All Files Uploaded, Application Will Shutdown
             {
@@ -119,12 +119,12 @@ namespace Updater
             }
             System.Threading.ThreadPool.QueueUserWorkItem((o) =>
             {
-                KeyValuePair<string, int> value = Data.Dequeue();
+                KeyValuePair<string, Int64> value = Data.Dequeue();
                 Dispatcher.Invoke(new Action(() => { lblFileName.Content = System.IO.Path.GetFileName(value.Key); }));
 
                 if (Core.SetFileData(System.IO.Path.GetFileName(value.Key), value.Value, System.IO.File.ReadAllBytes(value.Key)))
                 {
-                    Dispatcher.Invoke(new Action(() => { pbEst.Value = Convert.ToInt32(pbEst.Value) + 1; }));
+                    Dispatcher.Invoke(new Action(() => { pbEst.Value = Convert.ToInt64(pbEst.Value) + 1; }));
                     SetUploadData(Data);// pool Next File
                 }
                 else
